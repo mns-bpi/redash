@@ -9,11 +9,12 @@ from urllib.parse import urlparse
 
 from six import text_type
 from sshtunnel import open_tunnel
-from redash import settings
-from redash.utils import json_loads
+from redash import settings, utils
+from redash.utils import json_loads, query_is_select_no_limit, add_limit_to_query
 from rq.timeouts import JobTimeoutException
 
-from redash.utils.requests_session import requests, requests_session
+from redash.utils.requests_session import requests_or_advocate, requests_session, UnacceptableAddressException
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class BaseQueryRunner(object):
         """Returns this query runner's configured host.
         This is used primarily for temporarily swapping endpoints when using SSH tunnels to connect to a data source.
 
-        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port` 
+        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port`
         configuration values. If your query runner uses a different schema (e.g. a web address), you should override this function.
         """
         if "host" in self.configuration:
@@ -96,7 +97,7 @@ class BaseQueryRunner(object):
         """Sets this query runner's configured host.
         This is used primarily for temporarily swapping endpoints when using SSH tunnels to connect to a data source.
 
-        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port` 
+        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port`
         configuration values. If your query runner uses a different schema (e.g. a web address), you should override this function.
         """
         if "host" in self.configuration:
@@ -109,7 +110,7 @@ class BaseQueryRunner(object):
         """Returns this query runner's configured port.
         This is used primarily for temporarily swapping endpoints when using SSH tunnels to connect to a data source.
 
-        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port` 
+        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port`
         configuration values. If your query runner uses a different schema (e.g. a web address), you should override this function.
         """
         if "port" in self.configuration:
@@ -122,7 +123,7 @@ class BaseQueryRunner(object):
         """Sets this query runner's configured port.
         This is used primarily for temporarily swapping endpoints when using SSH tunnels to connect to a data source.
 
-        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port` 
+        `BaseQueryRunner`'s naïve implementation supports query runner implementations that store endpoints using `host` and `port`
         configuration values. If your query runner uses a different schema (e.g. a web address), you should override this function.
         """
         if "port" in self.configuration:
@@ -190,6 +191,17 @@ class BaseQueryRunner(object):
             **({"deprecated": True} if cls.deprecated else {}),
         }
 
+    @property
+    def supports_auto_limit(self):
+        return False
+
+    def apply_auto_limit(self, query_text, should_apply_auto_limit):
+        return query_text
+
+    def gen_query_hash(self, query_text, set_auto_limit=False):
+        query_text = self.apply_auto_limit(query_text, set_auto_limit)
+        return utils.gen_query_hash(query_text)
+
 
 class BaseSQLQueryRunner(BaseQueryRunner):
     def get_schema(self, get_stats=False):
@@ -208,11 +220,21 @@ class BaseSQLQueryRunner(BaseQueryRunner):
                 res = self._run_query_internal("select count(*) as cnt from %s" % t)
                 tables_dict[t]["size"] = res[0]["cnt"]
 
+    @property
+    def supports_auto_limit(self):
+        return True
 
-def is_private_address(url):
-    hostname = urlparse(url).hostname
-    ip_address = socket.gethostbyname(hostname)
-    return ipaddress.ip_address(text_type(ip_address)).is_private
+    def apply_auto_limit(self, query_text, should_apply_auto_limit):
+        if should_apply_auto_limit:
+            from redash.query_runner.databricks import split_sql_statements, combine_sql_statements
+            queries = split_sql_statements(query_text)
+            # we only check for last one in the list because it is the one that we show result
+            last_query = queries[-1]
+            if query_is_select_no_limit(last_query):
+                queries[-1] = add_limit_to_query(last_query)
+            return combine_sql_statements(queries)
+        else:
+            return query_text
 
 
 class BaseHTTPQueryRunner(BaseQueryRunner):
@@ -258,8 +280,6 @@ class BaseHTTPQueryRunner(BaseQueryRunner):
             return None
 
     def get_response(self, url, auth=None, http_method="get", **kwargs):
-        if is_private_address(url):
-            raise Exception("Can't query private addresses.")
 
         # Get authentication values if not given
         if auth is None:
@@ -280,12 +300,15 @@ class BaseHTTPQueryRunner(BaseQueryRunner):
             if response.status_code != 200:
                 error = "{} ({}).".format(self.response_error, response.status_code)
 
-        except requests.HTTPError as exc:
+        except requests_or_advocate.HTTPError as exc:
             logger.exception(exc)
             error = "Failed to execute query. " "Return Code: {} Reason: {}".format(
                 response.status_code, response.text
             )
-        except requests.RequestException as exc:
+        except UnacceptableAddressException as exc:
+            logger.exception(exc)
+            error = "Can't query private addresses."
+        except requests_or_advocate.RequestException as exc:
             # Catch all other requests exceptions and return the error.
             logger.exception(exc)
             error = str(exc)
