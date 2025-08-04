@@ -1,5 +1,152 @@
 # Change Log
 
+## V10.1.0 - 2021-11-23
+
+This release includes patches for three security vulnerabilities:
+
+- Insecure default configuration affects installations where REDASH_COOKIE_SECRET is not set explicitly (CVE-2021-41192)
+- SSRF vulnerability affects installations that enabled URL-loading data sources (CVE-2021-43780)
+- Incorrect usage of state parameter in OAuth client code affects installations where Google Login is enabled (CVE-2021-43777)
+
+And a couple features that didn't merge in time for 10.0.0
+
+- Big Query: Speed up schema loading (#5632)
+- Add support for Firebolt data source (#5606)
+- Fix: Loading schema for Sqlite DB with "Order" column name fails (#5623)
+
+## v10.0.0 - 2021-10-01
+
+A few changes were merged during the V10 beta period.
+
+- New Data Source: CSV/Excel Files
+- Fix: Edit Source button disappeared for users without CanEdit permissions
+- We pinned our docker base image to Python3.7-slim-buster to avoid build issues
+- Fix: dashboard list pagination didn't work
+
+## v10.0.0-beta - 2021-06-16
+
+Just over a year since our last release, the V10 beta is ready. Since we never made a non-beta release of V9, we expect many users will upgrade directly from V8 -> V10. This will bring a lot of exciting features. Please check out the V9 beta release notes below to learn more.
+
+This V10 beta incorporates fixes for the feedback we received on the V9 beta along with a few long-requested features (horizontal bar charts!) and other changes to improve UX and reliability.
+
+This release was made possible by contributions from 35+ people (the Github API didn't let us pull handles this time around): Alex Kovar, Alexander Rusanov, Arik Fraimovich, Ben Amor, Christopher Grant, Đặng Minh Dũng, Daniel Lang, deecay, Elad Ossadon, Gabriel Dutra, iwakiriK, Jannis Leidel, Jerry, Jesse Whitehouse, Jiajie Zhong, Jim Sparkman, Jonathan Hult, Josh Bohde, Justin Talbot, koooge, Lei Ni, Levko Kravets, Lingkai Kong, max-voronov, Mike Nason, Nolan Nichols, Omer Lachish, Patrick Yang, peterlee, Rafael Wendel, Sebastian Tramp, simonschneider-db, Tim Gates, Tobias Macey, Vipul Mathur, and Vladislav Denisov
+
+Our special thanks to [Sohail Ahmed](https://pk.linkedin.com/in/sohail-ahmed-755776184) for reporting a vulnerability in our "forgot password" page (#5425)
+
+### Upgrading
+
+(This section is duplicated from the previous release - since many users will upgrade directly from V8 -> V10)
+
+Typically, if you are running your own instance of Redash and wish to upgrade, you would simply modify the Docker tag in your `docker-compose.yml` file. Since RQ has replaced Celery in this version, there are a couple extra modifications that need to be done in your `docker-compose.yml`:
+
+1. Under `services/scheduler/environment`, omit `QUEUES` and `WORKERS_COUNT` (and omit `environment` altogether if it is empty).
+2. Under `services`, add a new service for general RQ jobs:
+
+```yaml
+worker:
+  <<: *redash-service
+  command: worker
+  environment:
+    QUEUES: "periodic emails default"
+    WORKERS_COUNT: 1
+```
+
+Following that, force a recreation of your containers with `docker-compose up --force-recreate --build` and you should be good to go.
+### UX
+- Redash now uses a vertical navbar
+- Dashboard list now includes “My Dashboards” filter
+- Dashboard parameters can now be re-ordered
+- Queries can now be executed with Shift + Enter on all platforms.
+- Added New Dashboard/Query/Alert buttons to corresponding list pages
+- Dashboard text widgets now prompt to confirm before closing the text editor
+- A plus sign is now shown between tags used for search
+- On the queries list view “My Queries” has moved above “Archived”
+- Improved behavior for filtering by tags in list views
+- When a user’s session expires for inactivity, they are prompted to log-in with a pop-up so they don’t lose their place in the app
+- Numerous accessibility changes towards the a11y standard
+- Hide the “Create” menu button if current user doesn’t have permission to any data sources
+
+### Visualizations
+- Feature: Added support for horizontal box plots
+- Feature: Added support for horizontal bar charts
+- Feature: Added “Reverse” option for Chart visualization legend
+- Feature: Added option to align Chart Y-axes at zero
+- Feature: The table visualization header is now fixed when scrolling
+- Feature: Added USA map to choropleth visualization
+- Fix: Selected filters were reset when switching visualizations
+- Fix: Stacked bar chart showed the wrong Y-axis range in some cases
+- Fix: Bar chart with second y axis overlapped data series
+- Fix: Y-axis autoscale failed when min or max was set
+- Fix: Custom JS visualization was broken because of a typo
+- Fix: Too large visualization caused filters block to collapse
+- Fix: Sankey visualization looked inconsistent if the data source returned VARCHAR instead of numeric types
+
+### Structural Updates
+- Redash now prevents CSRF attacks
+- Migration to TypeScript
+- Upgrade to Antd version 4
+### Data Sources
+- New Data Sources: SPARQL Endpoint, Eccenca Corporate Memory, TrinoDB
+- Databricks
+  - Custom Schema Browser that allows switching between databases
+  - Option added to truncate large results
+  - Support for multiple-statement queries
+  - Schema browser can now use eventlet instead of RQ
+- MongoDB:
+  - Moved Username and Password out of the connection string so that password can be stored secretly
+- Oracle:
+  - Fix: Annotated queries always failed. Annotation is now disabled
+- Postgres/CockroachDB:
+  - SSL certfile/keyfile fields are now handled as secret
+- Python:
+  - Feature: Custom built-ins are now supported
+  - Fix: Query runner was not compatible with Python 3
+- Snowflake:
+  - Data source now accepts a custom host address (for use with proxies)
+- TreasureData:
+  - API key field is now handled as secret
+- Yandex:
+  - OAuth token field is now handled as secret
+
+### Alerts
+- Feature: Added ability to mute alerts without deleting them
+- Change: Non-email alert destination details are now obfuscated to avoid leaking sensitive information (webhook URLs, tokens etc.)
+- Fix: numerical comparisons failed if value from query was a string
+
+### Parameters
+- Added “Last 12 months” option for dynamic date ranges
+
+### Bug Fixes
+- Fix: Private addresses were not allowed even when enforcing was disabled
+- Fix: Python query runner wasn’t updated for Python 3
+- Fix: Sorting queries by schedule returned the wrong order
+- Fix: Counter visualization was enormous in some cases
+- Fix: Dashboard URL will now change when the dashboard title changes
+- Fix: URL parameters were removed when forking a query
+- Fix: Create link on data sources page was broken
+- Fix: Queries could be reassigned to read-only data sources
+- Fix: Multi-select dropdown was very slow if there were 1k+ options
+- Fix: Search Input couldn’t be focused or updated while editing a dashboard
+- Fix: The CLI command for “status” did not work
+- Fix: The dashboard list screen displayed too few items under certain pagination configurations
+
+### Other
+- Added an environment variable to disable public sharing links for queries and dashboards
+- Alert destinations are now encrypted at the database
+- The base query runner now has stubs to implement result truncating for other data sources
+- Static SAML configuration and assertion encryption are now supported
+- Adds new component for adding extra actions to the query and dashboard pages
+- Non-admins with at least view_only permission on a dashboard can now make GET requests to the data source resource
+- Added a BLOCKED_DOMAINS setting to prevent sign-ups from emails at specific domains
+- Added a rate limit to the “forgot password” page
+- RQ workers will now shutdown gracefully for known error codes
+- Scheduled execution failure counter now resets following a successful ad hoc execution
+- Redash now deletes locks for cancelled queries
+- Upgraded Ace Editor from v6 to v9
+- Added a periodic job to remove ghost locks
+- Removed content width limit on all pages
+- Introduce a <Link> React component
+
 ## v9.0.0-beta - 2020-06-11
 
 This release was long time in the making and has several major changes:
@@ -287,14 +434,14 @@ You can now open the [Knowledge Base](https://redash.io/help) inside the applica
 
 ### Parameters
 
-- **Dashboard Parameters**: We improved the flow of adding queries with parameters to dashboards and now give you full control over how parameters are mapped. You no longer have to make sure all parameters have the same name or use the `Global` checkbox. We also added new options, like keeping the parameter local to the widget or setting a static value. [Read more in our Knowledge Base →](https://redash.io/help/user-guide/querying/query-parameters#Parameter-Mapping-on-Dashboards)
+- **Dashboard Parameters**: We improved the flow of adding queries with parameters to dashboards and now give you full control over how parameters are mapped. You no longer have to make sure all parameters have the same name or use the `Global` checkbox. We also added new options, like keeping the parameter local to the widget or setting a static value. [Read more in our Knowledge Base →](https://redash.io/help/user-guide/querying/query-parameters#Parameter-Mapping-on-Dashboards)
 - We added server side validation of parameter values for all parameter types, except for parameters of `text` type. All validated parameter types are considered safe. When a query is using safe parameters (or no parameters at all), View Only users can refresh it.
 - Refreshing safe queries is done using the new results API endpoint, which takes only a query ID (and optionally parameter values) and does not need the query text.
 
 ### Query Editor Improvements
 
 - Run only the highlighted query text: hit Execute after highlighting a portion of your query and only the selected portion will be sent to the database. This is useful for testing sub-SELECT statements and CTE's.
-- Improved auto complete: add a dot . after a table name in the query editor and auto complete will only suggest columns on that table.
+- Improved auto complete: add a dot . after a table name in the query editor and auto complete will only suggest columns on that table.
 - Autosave parameter configuration changes.
 - YAML syntax support (for data sources like Yandex Metrica).
 
@@ -1270,109 +1417,109 @@ We're releasing a new upgrade script -- see [here](https://redash.io/help-onprem
 
 ### Added
 
-- 61fe16e #1374: Add: allow '\*' in REDASH_CORS_ACCESS_CONTROL_ALLOW_ORIGIN (Allen Short)
-- 2f09043 #1113: Add: share modify/access permissions for queries and dashboard (whummer)
-- 3db0eea #1341: Add: support for specifying SAML nameid-format (zoetrope)
-- b0ecd0e #1343: Add: support for local SAML metadata file (zoetrope)
-- 0235d37 #1335: Add: allow changing alert email subject. (Arik Fraimovich)
-- 2135dfd #1333: Add: control over y axis min/max values (Arik Fraimovich)
-- 49e788a #1328: Add: support for snapshot generation service (Arik Fraimovich)
-- 229ca6c #1323: Add: collect runtime metrics for Celery tasks (Arik Fraimovich)
-- 931a1f3 #1315: Add: support for loading BigQuery schema (Arik Fraimovich)
-- 39b4f9a #1314: Add: support MongoDB SSL connections (Arik Fraimovich)
-- ca1ca9b #1312: Add: additional configuration for Celery jobs (Arik Fraimovich)
-- fc00e61 #1310: Add: support for date/time with seconds parameters (Arik Fraimovich)
-- d72a198 #1307: Add: API to force refresh data source schema (Arik Fraimovich)
-- beb89ec #1305: Add: UI to edit dashboard text box widget (Kazuhito Hokamura)
-- 808fdd4 #1298: Add: JIRA (JQL) query runner (Arik Fraimovich)
-- ff9e844 #1280: Add: configuration flag to disable scheduled queries (Hirotaka Suzuki)
-- ef4699a #1269: Add: Google Drive federated tables support in BigQuery query runner (Kurt Gooden)
-- 2eeb947 #1236: Add: query runner for Cassandra and ScyllaDB (syerushalmy)
-- 10b398e #1249: Add: override slack webhook parameters (mystelynx)
-- 2b5e340 #1252: Add: Schema loading support for Presto query runner (using information_schema) (Rohan Dhupelia)
-- 2aaf5dd #1250: Add: query snippets feature (Arik Fraimovich)
-- 8d8af73 #1226: Add: Sankey visualization (Arik Fraimovich)
-- a02edda #1222: Add: additional results format for sunburst visualization (Arik Fraimovich)
-- 0e70188 #1213: Add: new sunburst sequence visualization (Arik Fraimovich)
-- 9a6d2d7 #1204: Add: show views in schema browser for Vertica data sources (Matthew Carter)
-- 600afa5 #1138: Add: ability to register user defined function (UDF) resources for BigQuery DataSource/Query (fabito)
-- b410410 #1166: Add: "every 14 days" refresh option (Arik Fraimovich)
+- 61fe16e #1374: Add: allow '\*' in REDASH_CORS_ACCESS_CONTROL_ALLOW_ORIGIN (Allen Short)
+- 2f09043 #1113: Add: share modify/access permissions for queries and dashboard (whummer)
+- 3db0eea #1341: Add: support for specifying SAML nameid-format (zoetrope)
+- b0ecd0e #1343: Add: support for local SAML metadata file (zoetrope)
+- 0235d37 #1335: Add: allow changing alert email subject. (Arik Fraimovich)
+- 2135dfd #1333: Add: control over y axis min/max values (Arik Fraimovich)
+- 49e788a #1328: Add: support for snapshot generation service (Arik Fraimovich)
+- 229ca6c #1323: Add: collect runtime metrics for Celery tasks (Arik Fraimovich)
+- 931a1f3 #1315: Add: support for loading BigQuery schema (Arik Fraimovich)
+- 39b4f9a #1314: Add: support MongoDB SSL connections (Arik Fraimovich)
+- ca1ca9b #1312: Add: additional configuration for Celery jobs (Arik Fraimovich)
+- fc00e61 #1310: Add: support for date/time with seconds parameters (Arik Fraimovich)
+- d72a198 #1307: Add: API to force refresh data source schema (Arik Fraimovich)
+- beb89ec #1305: Add: UI to edit dashboard text box widget (Kazuhito Hokamura)
+- 808fdd4 #1298: Add: JIRA (JQL) query runner (Arik Fraimovich)
+- ff9e844 #1280: Add: configuration flag to disable scheduled queries (Hirotaka Suzuki)
+- ef4699a #1269: Add: Google Drive federated tables support in BigQuery query runner (Kurt Gooden)
+- 2eeb947 #1236: Add: query runner for Cassandra and ScyllaDB (syerushalmy)
+- 10b398e #1249: Add: override slack webhook parameters (mystelynx)
+- 2b5e340 #1252: Add: Schema loading support for Presto query runner (using information_schema) (Rohan Dhupelia)
+- 2aaf5dd #1250: Add: query snippets feature (Arik Fraimovich)
+- 8d8af73 #1226: Add: Sankey visualization (Arik Fraimovich)
+- a02edda #1222: Add: additional results format for sunburst visualization (Arik Fraimovich)
+- 0e70188 #1213: Add: new sunburst sequence visualization (Arik Fraimovich)
+- 9a6d2d7 #1204: Add: show views in schema browser for Vertica data sources (Matthew Carter)
+- 600afa5 #1138: Add: ability to register user defined function (UDF) resources for BigQuery DataSource/Query (fabito)
+- b410410 #1166: Add: "every 14 days" refresh option (Arik Fraimovich)
 - 906365f #967: Add: extend ElasticSearch query_runner to support aggregations (lloydw)
 
 ### Changed
 
 - 2de4aa2 #1395: Change: switch to requests in URL query runner (Arik Fraimovich)
 - db1a941 #1392: Change: Update documentation links to point at the new location. (Arik Fraimovich)
-- 002f794 #1368: Change: added ability to disable auto update in admin views (Arik Fraimovich)
-- aa5d14e #1366: Change: improve error message for exception in the Python query runner (deecay)
-- 880627c #1355: Change: pass the user object to the run_query method (Arik Fraimovich)
-- 23c605b #1342: SAML: specify entity id (zoetrope)
-- 015b1dc #1334: Change: allow specifying recipient address when sending email test message (Arik Fraimovich)
-- 39aaa2f #1292: Change: improvements to map visualization (Arik Fraimovich)
-- b22191b #1332: Change: upgrade Python packages (Arik Fraimovich)
-- 23ba98b #1331: Celery: Upgrade Celery to more recent version. (Arik Fraimovich)
-- 3283116 #1330: Change: upgrade Requests to latest version. (Arik Fraimovich)
-- 39091e0 #1324: Change: add more logging and information for refresh schemas task (Arik Fraimovich)
-- 462faea #1316: Change: remove deprecated settings (Arik Fraimovich)
-- 73e1837 #1313: Change: more flexible column width calculation (Arik Fraimovich)
-- e8eb840 #1279: Change: update bootstrap.sh to support Ubuntu 16.04 (IllusiveMilkman)
-- 8cf0252 #1262: Change: upgrade Plot.ly version and switch to smaller build (Arik Fraimovich)
-- 0b79fb8 #1306: Change: paginate queries page & add explicit urls. (Arik Fraimovich)
-- 41f99f5 #1299: Change: send Content-Type header (application/json) in query results responses (Tsuyoshi Tatsukawa)
-- dfb1a20 #1297: Change: update Slack configuration titles. (Arik Fraimovich)
-- 8c1056c #1294: Change: don't annotate BigQuery queries (Arik Fraimovich)
-- a3cf92e #1289: Change: use key_as_string when available (ElasticSearch query runner) (Arik Fraimovich)
-- e155191 #1285: Change: do not display Oracle tablespace name in schema browser (Matthew Carter)
-- 6cbc39c #1282: Change: deduplicate Google Spreadsheet columns (Arik Fraimovich)
-- 4caf2e3 #1277: Set specific version of cryptography lib (Arik Fraimovich)
-- d22f0d4 #1216: Change: bootstrap.sh - use non interactive dist-upgrade (Atsushi Sasaki)
-- 19530f4 #1245: Change: switch from CodeMirror to Ace editor (Arik Fraimovich)
-- dfb92db #1234: Change: MongoDB query runner set DB name as mandatory (Arik Fraimovich)
-- b750843 #1230: Change: annotate Presto queries with metadata (Noriaki Katayama)
-- 5b20fe2 #1217: Change: install libffi-dev for Cryptography (Ubuntu setup script) (Atsushi Sasaki)
-- a9fac34 #1206: Change: update pymssql version to 2.1.3 (kitsuyui)
-- 5d43cbe #1198: Change: add support for Standard SQL in BigQuery query runner (mystelynx)
-- 84d0c22 #1193: Change: modify the argument order of moment.add function call (Kenya Yamaguchi)
+- 002f794 #1368: Change: added ability to disable auto update in admin views (Arik Fraimovich)
+- aa5d14e #1366: Change: improve error message for exception in the Python query runner (deecay)
+- 880627c #1355: Change: pass the user object to the run_query method (Arik Fraimovich)
+- 23c605b #1342: SAML: specify entity id (zoetrope)
+- 015b1dc #1334: Change: allow specifying recipient address when sending email test message (Arik Fraimovich)
+- 39aaa2f #1292: Change: improvements to map visualization (Arik Fraimovich)
+- b22191b #1332: Change: upgrade Python packages (Arik Fraimovich)
+- 23ba98b #1331: Celery: Upgrade Celery to more recent version. (Arik Fraimovich)
+- 3283116 #1330: Change: upgrade Requests to latest version. (Arik Fraimovich)
+- 39091e0 #1324: Change: add more logging and information for refresh schemas task (Arik Fraimovich)
+- 462faea #1316: Change: remove deprecated settings (Arik Fraimovich)
+- 73e1837 #1313: Change: more flexible column width calculation (Arik Fraimovich)
+- e8eb840 #1279: Change: update bootstrap.sh to support Ubuntu 16.04 (IllusiveMilkman)
+- 8cf0252 #1262: Change: upgrade Plot.ly version and switch to smaller build (Arik Fraimovich)
+- 0b79fb8 #1306: Change: paginate queries page & add explicit urls. (Arik Fraimovich)
+- 41f99f5 #1299: Change: send Content-Type header (application/json) in query results responses (Tsuyoshi Tatsukawa)
+- dfb1a20 #1297: Change: update Slack configuration titles. (Arik Fraimovich)
+- 8c1056c #1294: Change: don't annotate BigQuery queries (Arik Fraimovich)
+- a3cf92e #1289: Change: use key_as_string when available (ElasticSearch query runner) (Arik Fraimovich)
+- e155191 #1285: Change: do not display Oracle tablespace name in schema browser (Matthew Carter)
+- 6cbc39c #1282: Change: deduplicate Google Spreadsheet columns (Arik Fraimovich)
+- 4caf2e3 #1277: Set specific version of cryptography lib (Arik Fraimovich)
+- d22f0d4 #1216: Change: bootstrap.sh - use non interactive dist-upgrade (Atsushi Sasaki)
+- 19530f4 #1245: Change: switch from CodeMirror to Ace editor (Arik Fraimovich)
+- dfb92db #1234: Change: MongoDB query runner set DB name as mandatory (Arik Fraimovich)
+- b750843 #1230: Change: annotate Presto queries with metadata (Noriaki Katayama)
+- 5b20fe2 #1217: Change: install libffi-dev for Cryptography (Ubuntu setup script) (Atsushi Sasaki)
+- a9fac34 #1206: Change: update pymssql version to 2.1.3 (kitsuyui)
+- 5d43cbe #1198: Change: add support for Standard SQL in BigQuery query runner (mystelynx)
+- 84d0c22 #1193: Change: modify the argument order of moment.add function call (Kenya Yamaguchi)
 
 ### Fixed
 
-- d6febb0 #1375: Fix: Download Dataset does not work when not logged in (Joshua Dechant)
-- 96553ad #1369: Fix: missing format call in Elasticsearch test method (Adam Griffiths)
-- c57c765 #1365: Fix: compare retrieval times in UTC timezone (Allen Short)
-- 37dff5f #1360: Fix: connection test was broken for MySQL (ichihara)
-- 360028c #1359: Fix: schema loading query for Hive was wrong for non default schema (laughingman7743)
-- 7ee41d4 #1358: Fix: make sure all calls to run_query updated with new parameter (Arik Fraimovich)
-- 0d94479 #1329: Fix: Redis memory leak. (Arik Fraimovich)
-- 7145aa2 #1325: Fix: queries API was doing N+1 queries in most cases (Arik Fraimovich)
-- cd2e927 #1311: Fix: BoxPlot visualization wasn't rendering on a dashboard (Arik Fraimovich)
-- a562ce7 #1309: Fix: properly render checkboxes in dynamic forms (Arik Fraimovich)
-- d48192c #1308: Fix: support for Unicode columns name in Google Spreadsheets (Arik Fraimovich)
-- e42f93f #1283: Fix: schema browser was unstable after opening a table (Arik Fraimovich)
-- 170bd65 #1272: Fix: TreasureData get_schema method was returning array instead of string as column name (ariarijp)
-- 4710c41 #1265: Fix: refresh modal not working for unsaved query (Arik Fraimovich)
-- bc3a5ab #1264: Fix: dashboard refresh not working (Arik Fraimovich)
-- 6202d09 #1240: Fix: when shared dashboard token not found, return 404 (Wesley Batista)
-- 93aac14 #1251: Fix: autocomplete went crazy when database has no autocomplete. (Arik Fraimovich)
-- b8eca28 #1246: Fix: support large schemas in schema browser (Arik Fraimovich)
-- b781003 #1223: Fix: Alert: when hipchat Alert.name is multibyte character, occur error. (toyama0919)
-- 0b928e6 #1227: Fix: Bower install fails in vagrant (Kazuhito Hokamura)
-- a411af2 #1232: Fix: don't show warning when query string (parameters value) changes (Kazuhito Hokamura)
-- 3dbb5a6 #1221: Fix: sunburst didn't handle all cases of path lengths (Arik Fraimovich)
-- a7cc1ee #1218: Fix: updated result not being saved when changing query text. (Arik Fraimovich)
-- 0617833 #1215: Fix: email alerts not working (Arik Fraimovich)
-- 78f65b1 #1187: Fix: read only users receive the permission error modal in query view (Arik Fraimovich)
-- bba801f #1167: Fix the version of setuptools on bootstrap script for Ubuntu (Takuya Arita)
-- ce81d69 #1160: Fix indentation in docker-compose-example.yml (Hirofumi Wakasugi)
-- dd759fe #1155: Fix: make all configuration values of Oracle required (Arik Fraimovich)
+- d6febb0 #1375: Fix: Download Dataset does not work when not logged in (Joshua Dechant)
+- 96553ad #1369: Fix: missing format call in Elasticsearch test method (Adam Griffiths)
+- c57c765 #1365: Fix: compare retrieval times in UTC timezone (Allen Short)
+- 37dff5f #1360: Fix: connection test was broken for MySQL (ichihara)
+- 360028c #1359: Fix: schema loading query for Hive was wrong for non default schema (laughingman7743)
+- 7ee41d4 #1358: Fix: make sure all calls to run_query updated with new parameter (Arik Fraimovich)
+- 0d94479 #1329: Fix: Redis memory leak. (Arik Fraimovich)
+- 7145aa2 #1325: Fix: queries API was doing N+1 queries in most cases (Arik Fraimovich)
+- cd2e927 #1311: Fix: BoxPlot visualization wasn't rendering on a dashboard (Arik Fraimovich)
+- a562ce7 #1309: Fix: properly render checkboxes in dynamic forms (Arik Fraimovich)
+- d48192c #1308: Fix: support for Unicode columns name in Google Spreadsheets (Arik Fraimovich)
+- e42f93f #1283: Fix: schema browser was unstable after opening a table (Arik Fraimovich)
+- 170bd65 #1272: Fix: TreasureData get_schema method was returning array instead of string as column name (ariarijp)
+- 4710c41 #1265: Fix: refresh modal not working for unsaved query (Arik Fraimovich)
+- bc3a5ab #1264: Fix: dashboard refresh not working (Arik Fraimovich)
+- 6202d09 #1240: Fix: when shared dashboard token not found, return 404 (Wesley Batista)
+- 93aac14 #1251: Fix: autocomplete went crazy when database has no autocomplete. (Arik Fraimovich)
+- b8eca28 #1246: Fix: support large schemas in schema browser (Arik Fraimovich)
+- b781003 #1223: Fix: Alert: when hipchat Alert.name is multibyte character, occur error. (toyama0919)
+- 0b928e6 #1227: Fix: Bower install fails in vagrant (Kazuhito Hokamura)
+- a411af2 #1232: Fix: don't show warning when query string (parameters value) changes (Kazuhito Hokamura)
+- 3dbb5a6 #1221: Fix: sunburst didn't handle all cases of path lengths (Arik Fraimovich)
+- a7cc1ee #1218: Fix: updated result not being saved when changing query text. (Arik Fraimovich)
+- 0617833 #1215: Fix: email alerts not working (Arik Fraimovich)
+- 78f65b1 #1187: Fix: read only users receive the permission error modal in query view (Arik Fraimovich)
+- bba801f #1167: Fix the version of setuptools on bootstrap script for Ubuntu (Takuya Arita)
+- ce81d69 #1160: Fix indentation in docker-compose-example.yml (Hirofumi Wakasugi)
+- dd759fe #1155: Fix: make all configuration values of Oracle required (Arik Fraimovich)
 
 ### Docs
 
-- a69ee0c #1225: Fix: RST formatting of the Vagrant documentation (Kazuhito Hokamura)
-- 03837c0 #1242: Docs: add warning re. quotes on column names and BigQuery (Ereli)
-- 9a98075 #1255: Docs: add documentation for InfluxDB (vishesh92)
-- e0485de #1195: Docs: fix typo in maintenance page title (Antoine Augusti)
-- 7681d3e #1164: Docs: update permission documentation (Daniel Darabos)
-- bcd3670 #1156: Docs: add SSL parameters to nginx configuration (Josh Cox)
+- a69ee0c #1225: Fix: RST formatting of the Vagrant documentation (Kazuhito Hokamura)
+- 03837c0 #1242: Docs: add warning re. quotes on column names and BigQuery (Ereli)
+- 9a98075 #1255: Docs: add documentation for InfluxDB (vishesh92)
+- e0485de #1195: Docs: fix typo in maintenance page title (Antoine Augusti)
+- 7681d3e #1164: Docs: update permission documentation (Daniel Darabos)
+- bcd3670 #1156: Docs: add SSL parameters to nginx configuration (Josh Cox)
 
 ## v0.11.1.b2095 - 2016-08-02
 
